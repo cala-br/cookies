@@ -11,6 +11,7 @@ class Cookie {
     this.name = name;
     this.value = value;
     this.path = path;
+    this.durationMs = 0;
     this.addDuration(duration);
   }
 
@@ -45,7 +46,7 @@ class Cookie {
    * @param {Duration.Options} options 
    */
   addDuration(options) {
-    this.durationMs = 
+    this.durationMs += 
       Duration.asMilliseconds(options);
   }
 
