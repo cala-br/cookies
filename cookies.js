@@ -6,56 +6,119 @@ class Cookie {
     name,
     value = '',
     path = '/',
-    duration = {},
+    duration = 'session',
+    secure = false,
+    domain = '',
+    sameSite = '',
   }) {
     this.name = name;
     this.value = value;
     this.path = path;
-    this.durationMs = 0;
-    this.addDuration(duration);
+    this.duration = duration;
+    this.secure = secure;
+    this.domain = domain;
+    this.sameSite = sameSite;
   }
+
 
   store() {
-    const expires =
-      new Date(Date.now() + this.durationMs);
+    const [expires, maxAge] = this.expiresAt();
+    const cookieString = `
+      ${this.name}=${encodeURIComponent(this.value)}
+      ;expires=${expires}
+      ;max-age=${maxAge}
+      ;path=${this.path}
+      ;domain=${this.domain}
+      ;samesite=${this.sameSite}
+      ;${this.secure ? 'secure' : ''}
+    `;
 
-    document.cookie = 
-      `${this.name}=${escape(this.value)}; expires=${expires.toUTCString()}; path=${this.path}`;
+    document.cookie = cookieString.replaceAll('\n', '');
   }
 
-  load(cast = String) {
-    const target = Cookie
-      .all()
-      .filter(c => c.name == this.name);
-    
-    if (target.length == 0)
-      return;
+  expiresAt() {
+    if (this.duration == 'session')
+      return ['', ''];
 
-    const value = target[0].value;
-    this.value = cast(unescape(value));
-    return this.value;
+    return [
+      Duration.asDate(this.duration).toUTCString(),
+      Duration.asSeconds(this.duration),
+    ];
+  }
+
+
+  /**
+   * @param {Cookie.Convert} cast 
+   * @returns {any}
+   */
+  load(cast = String) {
+    return this.value = Cookie.load(this.name, cast);
   }
 
   exists() {
-    return Cookie
-      .all()
-      .some(c => c.name == this.name)
+    return Cookie.exists(this.name);
   }
 
-  /**
-   * @param {Duration.Options} options 
-   */
-  addDuration(options) {
-    this.durationMs += 
-      Duration.asMilliseconds(options);
-  }
 
   delete() {
     this.value = undefined;
-    this.durationMs = -1;
+    this.duration = {
+      milliseconds: 0,
+    };
+
     this.store();
   }
 
+
+  /**
+   * @param {Cookie.Options} opts 
+   */
+  static store(opts) {
+    Cookie
+      .create(opts)
+      .store();
+  }
+
+  /**
+   * @param {string} name 
+   * @param {Cookie.Convert} cast 
+   * @returns {any}
+   */
+  static load(name, cast = String) {
+    const filtered = Cookie
+      .all()
+      .filter(c => c.name == name);
+  
+    const value = 
+      filtered[0]?.value;
+
+    if (value)
+      return cast(decodeURIComponent(value));
+  }
+
+  static exists(name) {
+    return Cookie
+      .all()
+      .some(c => c.name == name)
+  }
+
+  /**
+   * @param {string} name
+   */
+  static delete(name) {
+    Cookie
+      .withName(name)
+      .delete();
+  }
+
+
+  /**
+   * @param {string} name 
+   * @returns {Cookie}
+   */
+  static withName(name) {
+    return Cookie.create({ name: name });
+  }
 
   /**
    * @param {Cookie.Options} options 
@@ -65,11 +128,13 @@ class Cookie {
     return new Cookie(options);
   }
 
+  /**
+   * @returns {Cookie[]} 
+   */
   static all() {
     return document
       .cookie
-      .split(';')
-      .map(c => c.trimStart())
+      .split('; ')
       .map(c => c.split('='))
       .map(c => new Cookie({
         name: c[0], 
@@ -82,7 +147,25 @@ class Cookie {
 class Duration {
   /**
    * @param {Duration.Options} options 
-   * @returns 
+   * @returns {Date}
+   */
+  static asDate(options) {
+    const durationMs = 
+      Duration.asMilliseconds(options);
+    
+    return new Date(Date.now() + durationMs)
+  }
+
+  /**
+   * @param {Duration.Options} options 
+   */
+  static asSeconds(options) {
+    return Duration.asMilliseconds(options) / 1000;
+  }
+
+  /**
+   * @param {Duration.Options} options 
+   * @returns {number} 
    */
   static asMilliseconds(options) {
     const {
@@ -106,7 +189,16 @@ class Duration {
  * @property {string} name
  * @property {any} [value]
  * @property {string} [path]
- * @property {Duration.Options} [duration]
+ * @property {Duration.Options | 'session'} [duration]
+ * @property {boolean} [secure]
+ * @property {string} [domain]
+ * @property {'none' | 'lax' | 'strict'} [sameSite]
+ */
+
+/**
+ * @callback Cookie.Convert
+ * @param {string} value
+ * @returns {any}
  */
 
 /**
